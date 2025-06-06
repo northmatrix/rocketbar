@@ -25,9 +25,18 @@ fn read_int_from_file(path: &str) -> Result<u32, Box<dyn Error>> {
 fn read_load_avg(path: &str) -> Result<(f32, f32, f32), Box<dyn Error>> {
     let data = fs::read_to_string(path)?;
     let numbers: Vec<&str> = data.split_whitespace().collect();
-    let load1 = numbers.get(0).ok_or("Missing 01 load avg")?.parse::<f32>()?;
-    let load2 = numbers.get(1).ok_or("Missing 05 load avg")?.parse::<f32>()?;
-    let load3 = numbers.get(2).ok_or("Missing 15 load avg")?.parse::<f32>()?;
+    let load1 = numbers
+        .get(0)
+        .ok_or("Missing 01 load avg")?
+        .parse::<f32>()?;
+    let load2 = numbers
+        .get(1)
+        .ok_or("Missing 05 load avg")?
+        .parse::<f32>()?;
+    let load3 = numbers
+        .get(2)
+        .ok_or("Missing 15 load avg")?
+        .parse::<f32>()?;
     Ok((load1, load2, load3))
 }
 
@@ -70,24 +79,24 @@ fn format_volume(vol: u32) -> String {
 
 /// Check if a network interface is enabled.
 fn check_interface_enable(iface: &str) -> bool {
-    read_int_from_file(format!("/sys/class/net/{}/carrier", iface).as_str())
-        .unwrap_or(0) == 1
+    read_int_from_file(format!("/sys/class/net/{}/carrier", iface).as_str()).unwrap_or(0) == 1
 }
 
 /// Check if a network interface is up.
 fn check_interface_up(iface: &str) -> bool {
     read_to_string(format!("/sys/class/net/{}/operstate", iface))
         .unwrap_or_else(|_| "down".to_string())
-        .trim() == "up"
+        .trim()
+        == "up"
 }
 
 /// Get the current brightness level.
 fn get_brightness() -> Result<u32, Box<dyn Error>> {
-    let data0= read_to_string("/sys/class/backlight/acpi_video0/brightness")?;
-    let data1= read_to_string("/sys/class/backlight/acpi_video0/max_brightness")?;
+    let data0 = read_to_string("/sys/class/backlight/acpi_video0/brightness")?;
+    let data1 = read_to_string("/sys/class/backlight/acpi_video0/max_brightness")?;
     let brightness = data0.trim().parse::<u32>()?;
     let brightness_max = data1.trim().parse::<u32>()?;
-    Ok(( ( brightness as f32 / brightness_max as f32) * 100.0) as u32)
+    Ok(((brightness as f32 / brightness_max as f32) * 100.0) as u32)
 }
 
 /// Get the fan speed (in RPM) from system sensors.
@@ -99,9 +108,7 @@ fn get_fan_speed() -> Result<u32, Box<dyn Error>> {
 
 /// Get the system's IP address.
 fn get_ip_address() -> Result<String, Box<dyn Error>> {
-    let output = Command::new("hostname")
-        .arg("-I")
-        .output()?;
+    let output = Command::new("hostname").arg("-I").output()?;
 
     let ip_address = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
@@ -127,27 +134,17 @@ fn print_status(sys: &mut System, volume: u32) {
     let networks = Networks::new_with_refreshed_list();
     let mut status = Vec::new();
 
-    // Storage
-    if let Some(disk) = disks.first() {
-        status.push(json!({
-            "full_text": format!("󰋊 {:4.1}% Of {}", 
-                ((disk.total_space() - disk.available_space()) as f32 / disk.total_space() as f32) * 100.0, 
-                readable_bytes(disk.total_space() as f32)),
-            "name": "storage"
-        }));
-    }
-
     // Network
     let wifi_up = check_interface_up(WIFI_INTERFACE);
     let vpn_up = check_interface_enable(VPN_INTERFACE);
     let ethernet_up = check_interface_up(ETH_INTERFACE);
 
-       if vpn_up && ethernet_up {
+    if vpn_up && ethernet_up {
         if let Some(vpn) = networks.get(VPN_INTERFACE) {
             status.push(json!({
-                "full_text": format!("   {}  {}  {}", 
+                "full_text": format!("   {}  {}  {}",
                     get_country_code().unwrap_or("..".to_string()),
-                    readable_bytes(vpn.total_transmitted() as f32), 
+                    readable_bytes(vpn.total_transmitted() as f32),
                     readable_bytes(vpn.total_received() as f32)),
                 "name": "net"
             }));
@@ -155,65 +152,73 @@ fn print_status(sys: &mut System, volume: u32) {
     } else if vpn_up {
         if let Some(vpn) = networks.get(VPN_INTERFACE) {
             status.push(json!({
-                "full_text": format!("   {}  {}  {}", 
+                "full_text": format!("   {}  {}  {}",
                     get_country_code().unwrap_or("..".to_string()),
-                    readable_bytes(vpn.total_transmitted() as f32), 
-                    readable_bytes(vpn.total_received() as f32)), 
+                    readable_bytes(vpn.total_transmitted() as f32),
+                    readable_bytes(vpn.total_received() as f32)),
                 "name": "net"
             }));
         }
     } else if ethernet_up {
         if let Some(ethernet) = networks.get(ETH_INTERFACE) {
             status.push(json!({
-                "full_text": format!("  {}  {}", 
+                "full_text": format!("   {}  {}",
                     readable_bytes(ethernet.total_transmitted() as f32),
-                    readable_bytes(ethernet.total_received() as f32)), 
+                    readable_bytes(ethernet.total_received() as f32)),
                 "name": "net"
             }));
         }
     } else if wifi_up {
         if let Some(wifi) = networks.get(WIFI_INTERFACE) {
             status.push(json!({
-                "full_text": format!("   {}  {}", 
-                    readable_bytes(wifi.total_transmitted() as f32), 
-                    readable_bytes(wifi.total_received() as f32)), 
+                "full_text": format!("   {}  {}",
+                    readable_bytes(wifi.total_transmitted() as f32),
+                    readable_bytes(wifi.total_received() as f32)),
                 "name": "net"
             }));
         }
     }
 
+    // Storage
+    // if let Some(disk) = disks.first() {
+    //     status.push(json!({
+    //         "full_text": format!("󰋊 {:4.1}%",
+    //             ((disk.total_space() - disk.available_space()) as f32 / disk.total_space() as f32) * 100.0),
+    //         "name": "storage"
+    //     }));
+    // }
     // Temperature
-    if let Some(temp) = components.first() {
-        if let Some(temperature) = temp.temperature() {
-            status.push(json!({
-                "full_text": format!(" {}C", temperature),
-                "name": "temperature"
-            }));
-        }
-    }
+    // if let Some(temp) = components.first() {
+    //     if let Some(temperature) = temp.temperature() {
+    //         status.push(json!({
+    //             "full_text": format!(" {}C", temperature),
+    //             "name": "temperature"
+    //         }));
+    //     }
+    // }
 
     // Load Average
-    status.push(json!({
-        "full_text": format!("󰓅 {:.2}", read_load_avg("/proc/loadavg").unwrap().0),
-        "name": "load"
-    }));
-
-    // CPU Usage
-    status.push(json!({
-        "full_text": format!(" {:4.1}%", sys.global_cpu_usage()),
-        "name": "cpu"
-    }));
-
-    // Memory Usage
-    status.push(json!({
-        "full_text": format!(" {:4.1}% Of {}", (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0, readable_bytes(sys.total_memory() as f32)),
-        "name": "memory"
-    }));
+    // status.push(json!({
+    //     "full_text": format!("󰓅 {:.2}", read_load_avg("/proc/loadavg").unwrap().0),
+    //     "name": "load"
+    // }));
+    //
+    // // CPU Usage
+    // status.push(json!({
+    //     "full_text": format!(" {:4.1}%", sys.global_cpu_usage()),
+    //     "name": "cpu"
+    // }));
+    //
+    // // Memory Usage
+    // status.push(json!({
+    //     "full_text": format!(" {:4.1}%", (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0),
+    //     "name": "memory"
+    // }));
 
     // Volume
     status.push(json!({
         "full_text": format_volume(volume),
-        "name": "volume"
+        "name": "volume",
     }));
 
     // Brightness
@@ -225,12 +230,12 @@ fn print_status(sys: &mut System, volume: u32) {
     }
 
     // Fan Speed
-    if let Ok(fan_speed) = get_fan_speed() {
-        status.push(json!({
-            "full_text": format!(" {} RPM", fan_speed),
-            "name": "fan"
-        }));
-    }
+    // if let Ok(fan_speed) = get_fan_speed() {
+    //     status.push(json!({
+    //         "full_text": format!(" {} RPM", fan_speed),
+    //         "name": "fan"
+    //     }));
+    // }
 
     // IP Address
     if let Ok(ip) = get_ip_address() {
@@ -254,13 +259,17 @@ fn print_status(sys: &mut System, volume: u32) {
     println!("{},", serde_json::to_string(&status).unwrap());
 }
 
-fn get_country_code() -> Result<String,Box<dyn Error>> {
+fn get_country_code() -> Result<String, Box<dyn Error>> {
     let output = Command::new("nordvpn").arg("status").output()?;
-    let stdout =  String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
         if line.starts_with("Hostname:") {
             if let Some(hostname) = line.split_whitespace().nth(1) {
-                return Ok(hostname.chars().map(|x| x.to_ascii_uppercase()).take(2).collect())
+                return Ok(hostname
+                    .chars()
+                    .map(|x| x.to_ascii_uppercase())
+                    .take(2)
+                    .collect());
             }
         }
     }
@@ -322,4 +331,3 @@ fn main() {
         print_status(&mut sys, vol);
     }
 }
-
