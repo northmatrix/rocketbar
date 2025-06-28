@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use chrono::Local;
 use regex::Regex;
 use serde_json::json;
@@ -10,11 +12,26 @@ use std::thread;
 use std::time::Duration;
 use sysinfo::{Components, Disks, Networks, System};
 
+const BLACK: &str = "#15161E";
+const RED: &str = "#f7768e";
+const GREEN: &str = "#9ece6a";
+const YELLOW: &str = "#e0af68";
+const BLUE: &str = "#7aa2f7";
+const MAGENTA: &str = "#bb9af7";
+const CYAN: &str = "#7dcfff";
+const WHITE: &str = "#a9b1d6";
+
 const WIFI_INTERFACE: &str = "wlp2s0";
 const VPN_INTERFACE: &str = "nordlynx";
 const ETH_INTERFACE: &str = "enp3s0f0";
 
+struct NetTracker {
+    last_up: u64,
+    last_down: u64,
+    last_time: std::time::Instant,
+}
 /// Read integer from a file, useful for fan speed and other metrics.
+
 fn read_int_from_file(path: &str) -> Result<u32, Box<dyn Error>> {
     let data = fs::read_to_string(path)?;
     let number = data.trim().parse::<u32>()?;
@@ -70,11 +87,11 @@ fn get_volume() -> Option<u32> {
 fn format_volume(vol: u32) -> String {
     let icon = match vol {
         0 => "",
-        1..=30 => "",
-        31..=70 => "",
+        //1..=30 => "",
+        //31..=70 => "",
         _ => "",
     };
-    format!("{} {}%", icon, vol)
+    format!("{}  {}", icon, vol)
 }
 
 /// Check if a network interface is enabled.
@@ -107,21 +124,24 @@ fn get_fan_speed() -> Result<u32, Box<dyn Error>> {
 }
 
 /// Get the system's IP address.
-fn get_ip_address() -> Result<String, Box<dyn Error>> {
-    let output = Command::new("hostname").arg("-I").output()?;
-
+fn get_ip_address() -> Result<Vec<String>, Box<dyn Error>> {
+    let output = Command::new("ip").arg("a").output()?;
     let ip_address = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    let ip = ip_address.split_whitespace().nth(0).unwrap_or("Default Ip");
-    if ip.is_empty() {
-        Err("No IP address found".into())
-    } else {
-        Ok(ip.to_string())
+    let mut ip = Vec::new();
+    for x in ip_address.lines() {
+        if x.contains("inet ") && !x.contains("127.0.0.1") {
+            ip.push(format!(
+                "{} {}",
+                x.split_whitespace().into_iter().last().unwrap().to_string(),
+                x.split_whitespace().into_iter().nth(1).unwrap().to_string()
+            ))
+        }
     }
+    Ok(ip)
 }
 
 /// Print the system status as JSON.
-fn print_status(sys: &mut System, volume: u32) {
+fn print_status(sys: &mut System, volume: u32, tracker: &mut NetTracker) {
     let now = Local::now();
     let time = now.format("%H:%M:%S").to_string();
     let day = now.format("%A, %d %B %Y").to_string();
@@ -135,58 +155,126 @@ fn print_status(sys: &mut System, volume: u32) {
     let mut status = Vec::new();
 
     // Network
-    let wifi_up = check_interface_up(WIFI_INTERFACE);
-    let vpn_up = check_interface_enable(VPN_INTERFACE);
-    let ethernet_up = check_interface_up(ETH_INTERFACE);
-
-    if vpn_up && ethernet_up {
-        if let Some(vpn) = networks.get(VPN_INTERFACE) {
-            status.push(json!({
-                "full_text": format!("   {}  {}  {}",
-                    get_country_code().unwrap_or("..".to_string()),
-                    readable_bytes(vpn.total_transmitted() as f32),
-                    readable_bytes(vpn.total_received() as f32)),
-                "name": "net"
-            }));
-        }
-    } else if vpn_up {
-        if let Some(vpn) = networks.get(VPN_INTERFACE) {
-            status.push(json!({
-                "full_text": format!("   {}  {}  {}",
-                    get_country_code().unwrap_or("..".to_string()),
-                    readable_bytes(vpn.total_transmitted() as f32),
-                    readable_bytes(vpn.total_received() as f32)),
-                "name": "net"
-            }));
-        }
-    } else if ethernet_up {
-        if let Some(ethernet) = networks.get(ETH_INTERFACE) {
-            status.push(json!({
-                "full_text": format!("   {}  {}",
-                    readable_bytes(ethernet.total_transmitted() as f32),
-                    readable_bytes(ethernet.total_received() as f32)),
-                "name": "net"
-            }));
-        }
-    } else if wifi_up {
-        if let Some(wifi) = networks.get(WIFI_INTERFACE) {
-            status.push(json!({
-                "full_text": format!("   {}  {}",
-                    readable_bytes(wifi.total_transmitted() as f32),
-                    readable_bytes(wifi.total_received() as f32)),
-                "name": "net"
-            }));
-        }
-    }
+    // let wifi_up = check_interface_up(WIFI_INTERFACE);
+    // let vpn_up = check_interface_enable(VPN_INTERFACE);
+    // let ethernet_up = check_interface_up(ETH_INTERFACE);
+    //
+    // let now = std::time::Instant::now();
+    // let elapsed = now.duration_since(tracker.last_time).as_secs_f32();
+    //
+    // if vpn_up && ethernet_up {
+    //     if let Some(vpn) = networks.get(VPN_INTERFACE) {
+    //         let current_up = vpn.total_transmitted();
+    //         let current_down = vpn.total_received();
+    //         let rate_up = if elapsed > 0.0 {
+    //             (current_up - tracker.last_up) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         let rate_down = if elapsed > 0.0 {
+    //             (current_down - tracker.last_down) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         tracker.last_up = current_up;
+    //         tracker.last_down = current_down;
+    //         tracker.last_time = now;
+    //
+    //         status.push(json!({
+    //             "full_text": format!("   {}  {}s  {}s",
+    //                 get_country_code().unwrap_or("..".to_string()),
+    //                 readable_bytes(rate_up),
+    //                 readable_bytes(rate_down)),
+    //             "name": "net"
+    //         }));
+    //     }
+    // } else if vpn_up {
+    //     if let Some(vpn) = networks.get(VPN_INTERFACE) {
+    //         let current_up = vpn.total_transmitted();
+    //         let current_down = vpn.total_received();
+    //         let rate_up = if elapsed > 0.0 {
+    //             (current_up - tracker.last_up) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         let rate_down = if elapsed > 0.0 {
+    //             (current_down - tracker.last_down) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         tracker.last_up = current_up;
+    //         tracker.last_down = current_down;
+    //         tracker.last_time = now;
+    //
+    //         status.push(json!({
+    //             "full_text": format!("   {}  {}s  {}s",
+    //                 get_country_code().unwrap_or("..".to_string()),
+    //                 readable_bytes(rate_up),
+    //                 readable_bytes(rate_down)),
+    //             "name": "net"
+    //         }));
+    //     }
+    // } else if ethernet_up {
+    //     if let Some(ethernet) = networks.get(ETH_INTERFACE) {
+    //         let current_up = ethernet.total_transmitted();
+    //         let current_down = ethernet.total_received();
+    //         let rate_up = if elapsed > 0.0 {
+    //             (current_up - tracker.last_up) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         let rate_down = if elapsed > 0.0 {
+    //             (current_down - tracker.last_down) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         tracker.last_up = current_up;
+    //         tracker.last_down = current_down;
+    //         tracker.last_time = now;
+    //
+    //         status.push(json!({
+    //             "full_text": format!("   {}s  {}s",
+    //                 readable_bytes(rate_up),
+    //                 readable_bytes(rate_down)),
+    //             "name": "net",
+    //             "color" : BLUE,
+    //         }));
+    //     }
+    // } else if wifi_up {
+    //     if let Some(wifi) = networks.get(WIFI_INTERFACE) {
+    //         let current_up = wifi.total_transmitted();
+    //         let current_down = wifi.total_received();
+    //         let rate_up = if elapsed > 0.0 {
+    //             (current_up - tracker.last_up) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         let rate_down = if elapsed > 0.0 {
+    //             (current_down - tracker.last_down) as f32 / elapsed
+    //         } else {
+    //             0.0
+    //         };
+    //         tracker.last_up = current_up;
+    //         tracker.last_down = current_down;
+    //         tracker.last_time = now;
+    //
+    //         status.push(json!({
+    //             "full_text": format!("   {}s {}s",
+    //                 readable_bytes(rate_up),
+    //                 readable_bytes(rate_down)),
+    //             "name": "net"
+    //         }));
+    //     }
+    // }
 
     // Storage
-    // if let Some(disk) = disks.first() {
-    //     status.push(json!({
-    //         "full_text": format!("󰋊 {:4.1}%",
-    //             ((disk.total_space() - disk.available_space()) as f32 / disk.total_space() as f32) * 100.0),
-    //         "name": "storage"
-    //     }));
-    // }
+    if let Some(disk) = disks.first() {
+        status.push(json!({
+            "full_text": format!("󰋊 {:4.1}",
+                ((disk.total_space() - disk.available_space()) as f32 / disk.total_space() as f32) * 100.0),
+            "name": "storage"
+        }));
+    }
     // Temperature
     // if let Some(temp) = components.first() {
     //     if let Some(temperature) = temp.temperature() {
@@ -199,21 +287,20 @@ fn print_status(sys: &mut System, volume: u32) {
 
     // Load Average
     // status.push(json!({
-    //     "full_text": format!("󰓅 {:.2}", read_load_avg("/proc/loadavg").unwrap().0),
+    //     "full_text": format!("󰓅 {:.1}", read_load_avg("/proc/loadavg").unwrap().0),
     //     "name": "load"
     // }));
-    //
-    // // CPU Usage
-    // status.push(json!({
-    //     "full_text": format!(" {:4.1}%", sys.global_cpu_usage()),
-    //     "name": "cpu"
-    // }));
-    //
-    // // Memory Usage
-    // status.push(json!({
-    //     "full_text": format!(" {:4.1}%", (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0),
-    //     "name": "memory"
-    // }));
+
+    // CPU Usage
+    status.push(json!({
+        "full_text": format!(" {:4.1}", sys.global_cpu_usage()),
+        "name": "cpu"
+    }));
+    // Memory Usage
+    status.push(json!({
+         "full_text": format!(" {:4.1}", (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0),
+         "name": "memory"
+     }));
 
     // Volume
     status.push(json!({
@@ -224,8 +311,8 @@ fn print_status(sys: &mut System, volume: u32) {
     // Brightness
     if let Ok(brightness) = get_brightness() {
         status.push(json!({
-            "full_text": format!(" {}%", brightness),
-            "name": "brightness"
+            "full_text": format!("  {}", brightness),
+            "name": "brightness",
         }));
     }
 
@@ -239,21 +326,23 @@ fn print_status(sys: &mut System, volume: u32) {
 
     // IP Address
     if let Ok(ip) = get_ip_address() {
-        status.push(json!({
-            "full_text": format!(" {}", ip),
-            "name": "ip"
-        }));
+        for x in ip {
+            status.push(json!({
+                "full_text": format!(" {}", x),
+                "name": "ip",
+            }));
+        }
     }
 
     // Time & Date
     status.push(json!({
-        "full_text": format!("󰥔 {}", time),
-        "name": "clock"
+        "full_text": format!("󰥔  {} ", time),
+        "name": "clock",
     }));
-    status.push(json!({
-        "full_text": format!(" {}", day),
-        "name": "date"
-    }));
+    // status.push(json!({
+    //      "full_text": format!("  {}", day),
+    //      "name": "date"
+    // }));
 
     // Output status as JSON
     println!("{},", serde_json::to_string(&status).unwrap());
@@ -318,8 +407,14 @@ fn main() {
         });
     }
 
+    let mut net_state = NetTracker {
+        last_up: 0,
+        last_down: 0,
+        last_time: std::time::Instant::now(),
+    };
+
     // First output
-    print_status(&mut sys, *volume.lock().unwrap());
+    print_status(&mut sys, *volume.lock().unwrap(), &mut net_state);
 
     // Subsequent updates
     let (lock, cvar) = &*pair;
@@ -328,6 +423,6 @@ fn main() {
         let _ = cvar.wait_timeout(notified, Duration::from_secs(1)).unwrap();
 
         let vol = *volume.lock().unwrap();
-        print_status(&mut sys, vol);
+        print_status(&mut sys, vol, &mut net_state);
     }
 }
