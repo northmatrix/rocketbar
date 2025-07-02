@@ -268,13 +268,13 @@ fn print_status(sys: &mut System, volume: u32, tracker: &mut NetTracker) {
     // }
 
     // Storage
-    if let Some(disk) = disks.first() {
-        status.push(json!({
-            "full_text": format!("󰋊 {:4.1}",
-                ((disk.total_space() - disk.available_space()) as f32 / disk.total_space() as f32) * 100.0),
-            "name": "storage"
-        }));
-    }
+    //if let Some(disk) = disks.first() {
+    //    status.push(json!({
+    //        "full_text": format!("󰋊 {:4.1}",
+    //            ((disk.total_space() - disk.available_space()) as f32 / disk.total_space() as f32) * 100.0),
+    //        "name": "storage"
+    //    }));
+    //}
     // Temperature
     // if let Some(temp) = components.first() {
     //     if let Some(temperature) = temp.temperature() {
@@ -292,15 +292,15 @@ fn print_status(sys: &mut System, volume: u32, tracker: &mut NetTracker) {
     // }));
 
     // CPU Usage
-    status.push(json!({
-        "full_text": format!(" {:4.1}", sys.global_cpu_usage()),
-        "name": "cpu"
-    }));
+    //status.push(json!({
+    //    "full_text": format!(" {:4.1}", sys.global_cpu_usage()),
+    //    "name": "cpu"
+    //}));
     // Memory Usage
-    status.push(json!({
-         "full_text": format!(" {:4.1}", (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0),
-         "name": "memory"
-     }));
+    //status.push(json!({
+    //     "full_text": format!(" {:4.1}", (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0),
+    //     "name": "memory"
+    // }));
 
     // Volume
     status.push(json!({
@@ -325,14 +325,14 @@ fn print_status(sys: &mut System, volume: u32, tracker: &mut NetTracker) {
     // }
 
     // IP Address
-    if let Ok(ip) = get_ip_address() {
-        for x in ip {
-            status.push(json!({
-                "full_text": format!(" {}", x),
-                "name": "ip",
-            }));
-        }
-    }
+    //if let Ok(ip) = get_ip_address() {
+    //   for x in ip {
+    //        status.push(json!({
+    //            "full_text": format!(" {}", x),
+    //            "name": "ip",
+    //        }));
+    //    }
+    //}
 
     // Time & Date
     status.push(json!({
